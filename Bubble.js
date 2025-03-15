@@ -95,35 +95,38 @@ export class Bubble {
       return;
     }
 
-    // Draw bubble
-    this.ctx.beginPath();
-    this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    this.ctx.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${this.opacity})`;
-    this.ctx.fill();
+    // Only draw if radius is greater than 0
+    if (this.radius > 0) {
+      // Draw bubble
+      this.ctx.beginPath();
+      this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      this.ctx.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${this.opacity})`;
+      this.ctx.fill();
 
-    // Draw shine
-    this.ctx.beginPath();
-    this.ctx.arc(
-      this.x - this.radius / 3,
-      this.y - this.radius / 3,
-      this.radius / 4,
-      0,
-      Math.PI * 2
-    );
-    this.ctx.fillStyle = `rgba(${this.r + 40}, ${this.g + 40}, ${
-      this.b + 40
-    }, ${this.opacity + 0.2})`;
-    this.ctx.fill();
+      // Draw shine
+      this.ctx.beginPath();
+      this.ctx.arc(
+        this.x - this.radius / 3,
+        this.y - this.radius / 3,
+        this.radius / 4,
+        0,
+        Math.PI * 2
+      );
+      this.ctx.fillStyle = `rgba(${this.r + 40}, ${this.g + 40}, ${
+        this.b + 40
+      }, ${this.opacity + 0.2})`;
+      this.ctx.fill();
 
-    // Draw text with lighter version of bubble color
-    this.ctx.fillStyle = `rgba(${Math.min(255, this.r + 100)},
-                                ${Math.min(255, this.g + 100)},
-                                ${Math.min(255, this.b + 100)},
-                                ${Math.min(1, this.opacity + 0.4)})`;
-    this.ctx.font = `${this.radius / 3}px Arial`;
-    this.ctx.textAlign = "center";
-    this.ctx.textBaseline = "middle";
-    this.ctx.fillText(this.text, this.x, this.y);
+      // Draw text with lighter version of bubble color
+      this.ctx.fillStyle = `rgba(${Math.min(255, this.r + 100)},
+                              ${Math.min(255, this.g + 100)},
+                              ${Math.min(255, this.b + 100)},
+                              ${Math.min(1, this.opacity + 0.4)})`;
+      this.ctx.font = `${this.radius / 3}px Arial`;
+      this.ctx.textAlign = "center";
+      this.ctx.textBaseline = "middle";
+      this.ctx.fillText(this.text, this.x, this.y);
+    }
   }
 
   update(bubbles) {
@@ -232,7 +235,7 @@ export class Bubble {
     }, 0);
 
     // Calculate canvas area (we'll use 60% as maximum coverage)
-    const maxAllowedArea = canvas.width * canvas.height * 0.8;
+    const maxAllowedArea = canvas.width * canvas.height * 0.6;
 
     // If total bubble area exceeds allowed area, scale all bubbles down
     if (totalBubbleArea > maxAllowedArea) {

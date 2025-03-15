@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Floating Bubbles</title>
+    <title>Word Mapper</title>
     <style>
       canvas {
         background: #1a1a1a;
@@ -38,7 +38,7 @@
         border-color: #666;
       }
 
-      #showCommonWordsToggle {
+      #hideCommonWordsToggle {
         position: absolute;
         top: 10px;
         right: 10px;
@@ -94,47 +94,179 @@
       input:checked + .toggle-slider:before {
         transform: translateX(20px);
       }
+
+      .settings-button {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+        color: #888;
+        font-size: 14px;
+        z-index: 1000;
+        background: rgba(26, 26, 26, 0.8);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 2px solid #444;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        transition: all 0.2s ease;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+
+      .settings-button:hover {
+        background: rgba(40, 40, 40, 0.8);
+        border-color: #666;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        -ms-user-select: none;
+        user-select: none;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      .tooltip {
+        position: relative;
+        display: inline-block;
+      }
+
+      .tooltip .tooltip-text {
+        visibility: hidden;
+        width: 500px;
+        background-color: rgba(26, 26, 26, 0.95);
+        color: #888;
+        text-align: left;
+        padding: 10px;
+        border-radius: 6px;
+        border: 2px solid #444;
+        font-size: 14px;
+
+        /* Position the tooltip */
+        position: absolute;
+        z-index: 1001;
+        top: 100%;
+        right: 0;
+        margin-top: 5px;
+
+        /* Add fade in/out */
+        opacity: 0;
+        transition: opacity 0.2s;
+      }
+
+      .tooltip:hover .tooltip-text {
+        visibility: visible;
+        opacity: 1;
+      }
     </style>
   </head>
   <body>
+    <div class="settings-button" id="configToggle">
+      <span>Settings</span>
+    </div>
     <canvas id="bubbleCanvas"></canvas>
     <textarea
       id="textInput"
-      placeholder="Type or paste text here to update the bubbles..."
+      placeholder="Type or paste text here to create a word map..."
       rows="3"
-    >
-    </textarea>
-    <div id="showCommonWordsToggle">
-      <label class="toggle-switch">
-        <input type="checkbox" id="showCommonWords" />
-        <span class="toggle-slider"></span>
-      </label>
-      <span>Show Common Words</span>
+    ></textarea>
+    <div style="
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      color: #888;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+      text-align: left;
+      z-index: 0;
+      white-space: nowrap;
+    ">
+      - Click a bubble to remove it<br>
+      - Reload page to clear all
     </div>
     <div
-      id="speedLimitToggle"
+      id="configContainer"
+      class="hidden"
       style="
         position: absolute;
-        top: 40px;
+        top: 50px;
         right: 10px;
         display: flex;
-        align-items: center;
-        gap: 8px;
+        flex-direction: column;
+        gap: 10px;
         font-family: Arial, sans-serif;
         font-size: 14px;
         color: #888;
+        background: rgba(26, 26, 26, 0.8);
+        padding: 15px;
+        border-radius: 8px;
+        z-index: 1000;
       "
     >
-      <label class="toggle-switch">
-        <input type="checkbox" id="limitSpeed" checked />
-        <span class="toggle-slider"></span>
-      </label>
-      <span>Limit Bubble Speed</span>
-    </div>
-    <script type="module">
-      import { Bubble } from "./Bubble.js";
-      import { commonWords } from "./CommonWords.js";
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 60px auto;
+          gap: 8px;
+          align-items: center;
+        "
+      >
+        <label class="toggle-switch" style="justify-self: start">
+          <input type="checkbox" id="hideCommonWords" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="tooltip">
+          Hide Common Words
+          <div class="tooltip-text">
+            <span id="hidden-words"></span>
+          </div>
+        </span>
+      </div>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 60px auto;
+          gap: 8px;
+          align-items: center;
+        "
+      >
+        <label class="toggle-switch" style="justify-self: start">
+          <input type="checkbox" id="limitSpeed" checked />
+          <span class="toggle-slider"></span>
+        </label>
+        <span>Limit Bubble Speed</span>
+      </div>
 
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 60px auto;
+          gap: 8px;
+          align-items: center;
+        "
+      >
+        <input
+          type="number"
+          id="minCount"
+          value="1"
+          min="1"
+          style="
+            width: 35px;
+            padding: 2px;
+            background: rgba(26, 26, 26, 0.8);
+            border: 2px solid #444;
+            border-radius: 4px;
+            color: white;
+            justify-self: start;
+          "
+        />
+      <span>Minimum Frequency</span>
+    </div>
+    <script>
       let wordCounts = new Map();
       const bubbles = [];
       const canvas = document.getElementById("bubbleCanvas");
@@ -146,18 +278,20 @@
           .getElementById("textInput")
           .addEventListener("keydown", function (e) {
             if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault(); // Prevent default newline
-              updateWordMap(this.value); // Update bubbles with current text
-              this.value = ""; // Clear the input
+              e.preventDefault();
+              updateWordMap(this.value);
+              this.value = "";
             }
           });
 
-        // Add checkbox event listener
         document
-          .getElementById("showCommonWords")
+          .getElementById("hideCommonWords")
           .addEventListener("change", () => forceReRender());
 
-        // Add speed limit toggle event listener
+        document
+          .getElementById("minCount")
+          .addEventListener("change", () => forceReRender());
+
         document
           .getElementById("limitSpeed")
           .addEventListener("change", function () {
@@ -166,15 +300,30 @@
             });
           });
 
-        // Initialize canvas only
+        document
+          .getElementById("hidden-words")
+          .textContent = "Hidden words: " + commonWords.join(", ");
+
+        window.addEventListener("resize", () => {
+          canvas.width = window.innerWidth;
+          canvas.height = window.innerHeight;
+          Bubble.adjustBubbleSizes(bubbles, canvas);
+        });
+
+        // Add config toggle functionality
+        const configToggle = document.getElementById("configToggle");
+        const configContainer = document.getElementById("configContainer");
+
+        configToggle.addEventListener("click", () => {
+          configContainer.classList.toggle("hidden");
+        });
+
         initCanvas();
       };
 
-      // Move canvas initialization to a separate function
       function initCanvas() {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
-        // Start animation loop immediately
         animate();
       }
 
@@ -190,109 +339,605 @@
         requestAnimationFrame(animate);
       }
 
-      // Handle window resize
-      window.addEventListener("resize", () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        Bubble.adjustBubbleSizes(bubbles, canvas);
-      });
-
-      // Add this new function to handle text updates
-      function updateWordMap(newText) {
-        const words = newText
-          .split(/\s+/)
-          .map((word) => word.replace(/[^\w\s]|_/g, "").trim())
-          .filter((line) => line !== "");
-
-        const wc = getWordFrequencyMap(words);
-        const showCommonWords =
-          document.getElementById("showCommonWords").checked;
-
-        wc.forEach((count, word) => {
-          if (!showCommonWords || !commonWords.includes(word)) {
-            const existingCount = wordCounts.get(word) || 0;
-            wordCounts.set(word, existingCount + count);
-          }
-        });
-
-        // Update existing bubbles
-        bubbles.forEach((bubble) => {
-          const newCount = wordCounts.get(bubble.text.toLowerCase()) || 0;
-          if (
-            // Hide common words
-            !showCommonWords &&
-            commonWords.includes(bubble.text.toLowerCase())
-          ) {
-            bubble.targetRadius = 0;
-          } else if (
-            // Show common words
-            showCommonWords &&
-            commonWords.includes(bubble.text.toLowerCase()) &&
-            bubble.targetRadius === 0
-          ) {
-            bubble.targetRadius = newCount * 17;
-          } else if (
-            newCount > 1 &&
-            (!showCommonWords ||
-              !commonWords.includes(bubble.text.toLowerCase()))
-          ) {
-            bubble.targetRadius = newCount * 17;
-          }
-        });
-
-        // Add new bubbles for new words
-        wordCounts.forEach((count, word) => {
-          if (count > 1 && (!showCommonWords || !commonWords.includes(word))) {
-            const existingBubble = bubbles.find(
-              (b) => b.text.toLowerCase() === word.toLowerCase()
-            );
-            if (!existingBubble) {
-              bubbles.push(
-                new Bubble(
-                  word,
-                  count,
-                  canvas,
-                  ctx,
-                  (b) => {
-                    wordCounts.delete(b.text.toLowerCase());
-                    forceReRender();
-                  },
-                  document.getElementById("limitSpeed").checked
-                )
-              );
-            }
-          }
-        });
-
-        Bubble.adjustBubbleSizes(bubbles, canvas);
-      }
-
       function forceReRender() {
         updateWordMap("");
         bubbles.forEach((bubble) => bubble.draw());
       }
 
-      function getWordFrequencyMap(words) {
-        // Create a Map to store word counts
-        const wordCounts = new Map();
-
-        // Count occurrences of each word
-        words.forEach((word) => {
-          const lowercaseWord = word.toLowerCase(); // normalize words to lowercase
-          wordCounts.set(
-            lowercaseWord,
-            (wordCounts.get(lowercaseWord) || 0) + 1
-          );
-        });
-
-        // Convert to array and sort by count (descending)
-        const sortedWords = Array.from(wordCounts.entries()).sort(
-          (a, b) => b[1] - a[1]
+      function updateWordMap(newText) {
+        wordCounts = appendWordFrequencyMap(
+          wordCounts,
+          newText
+            .split(/\s+/)
+            .map((word) => word.replace(/[^\w\s]|_/g, "").trim())
+            .filter((line) => line !== "")
         );
 
-        // Convert back to Map to maintain order
-        return new Map(sortedWords);
+        wordCounts.forEach((count, word) => {
+          const existingBubble = bubbles.find(
+            (b) => b.text.toLowerCase() === word.toLowerCase()
+          );
+
+          if (existingBubble) {
+            const newCount = wordCounts.get(word.toLowerCase()) || 0;
+            existingBubble.targetRadius = getRadiusOrHide(
+              existingBubble,
+              newCount
+            );
+          } else {
+            let newBubble = new Bubble(
+              word,
+              count,
+              canvas,
+              ctx,
+              (b) => {
+                wordCounts.delete(b.text.toLowerCase());
+                Bubble.adjustBubbleSizes(bubbles, canvas);
+                forceReRender();
+              },
+              document.getElementById("limitSpeed").checked
+            );
+
+            newBubble.targetRadius = getRadiusOrHide(newBubble, count);
+            bubbles.push(newBubble);
+          }
+        });
+
+        Bubble.adjustBubbleSizes(bubbles, canvas);
       }
+
+      function getRadiusOrHide(bubble, wordCount) {
+        const hideCommonWords =
+          document.getElementById("hideCommonWords").checked;
+
+        const minWordCount =
+          parseInt(document.getElementById("minCount").value) || 1;
+
+        if (
+          // Hide common words
+          (hideCommonWords &&
+            commonWords.includes(bubble.text.toLowerCase())) ||
+          // OR hide if it is below the minimum word count threshold
+          wordCount < minWordCount
+        ) {
+          return 0;
+        } else if (bubble.targetRadius === 0) {
+          // If it was hidden but didn't match any of the above hiding conditions...
+          // Make it the right size again.
+          return wordCount * SCALING_FACTOR;
+        }
+
+        // Default to the right size.
+        return wordCount * SCALING_FACTOR;
+      }
+
+      // XXX: ---------------- Utilities.js
+function appendWordFrequencyMap(wordCounts, words) {
+  words.forEach((word) => {
+    const lowercaseWord = word.toLowerCase();
+    wordCounts.set(lowercaseWord, (wordCounts.get(lowercaseWord) || 0) + 1);
+  });
+
+  return wordCounts;
+}
+
+
+      // XXX: ---------------- Bubble.js
+      class Bubble {
+  // Declare class properties
+  targetRadius;
+  baseRadius;
+  radius;
+  growthSpeed;
+  x;
+  y;
+  speedX;
+  speedY;
+  opacity;
+  r;
+  g;
+  b;
+  text;
+  count;
+  canvas;
+  ctx;
+  isPopping;
+  popProgress;
+  popSpeed;
+  maxSpeed;
+  speedLimitEnabled;
+
+  constructor(word, count, canvas, ctx, popCallback, speedLimitEnabled = true) {
+    // Base size on word frequency (count)
+    const sizeMultiplier = 17;
+    this.targetRadius = count * sizeMultiplier;
+    this.baseRadius = this.targetRadius;
+    this.radius = this.targetRadius;
+    this.growthSpeed = 0.1; // Speed of size change animation
+
+    const minHeight = canvas.height / 3;
+    const maxHeight = canvas.height - this.radius;
+    this.y = Math.random() * (maxHeight - minHeight) + minHeight;
+    this.x = this.radius; // Just enough space from left edge
+
+    // Initial velocity aimed upward and to the right
+    const maxSpeed = 3; // Maximum allowed speed
+    const speed = Math.min(2, maxSpeed); // Initial speed capped at maxSpeed
+    // Random angle up
+    const angle = -(Math.random() * (Math.PI / 3 - Math.PI / 6) + Math.PI / 6);
+    this.speedX = Math.cos(angle) * speed;
+    this.speedY = Math.sin(angle) * speed;
+    this.maxSpeed = maxSpeed; // Store maxSpeed as instance property
+    this.speedLimitEnabled = speedLimitEnabled;
+
+    this.opacity = Math.random() * 0.5 + 0.3;
+
+    this.r = Math.floor(Math.random() * 256);
+    this.g = Math.floor(Math.random() * 256);
+    this.b = Math.floor(Math.random() * 256);
+
+    this.text = word;
+    this.count = count;
+    this.canvas = canvas;
+    this.ctx = ctx;
+    this.isPopping = false;
+    this.popProgress = 0;
+    this.popSpeed = 0.1;
+
+    // Add click handler
+    canvas.addEventListener("click", (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const clickY = e.clientY - rect.top;
+
+      // Check if click is within bubble
+      const dx = clickX - this.x;
+      const dy = clickY - this.y;
+      if (Math.sqrt(dx * dx + dy * dy) <= this.radius) {
+        this.isPopping = true;
+        if (popCallback) {
+          popCallback(this);
+        }
+      }
+    });
+  }
+
+  draw() {
+    if (this.isPopping) {
+      // Draw popping animation
+      this.ctx.beginPath();
+      this.ctx.arc(
+        this.x,
+        this.y,
+        this.radius * (1 + this.popProgress),
+        0,
+        Math.PI * 2
+      );
+      this.ctx.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${
+        this.opacity * (1 - this.popProgress)
+      })`;
+      this.ctx.fill();
+      return;
+    }
+
+    // Only draw if radius is greater than 0
+    if (this.radius > 0) {
+      // Draw bubble
+      this.ctx.beginPath();
+      this.ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+      this.ctx.fillStyle = `rgba(${this.r}, ${this.g}, ${this.b}, ${this.opacity})`;
+      this.ctx.fill();
+
+      // Draw shine
+      this.ctx.beginPath();
+      this.ctx.arc(
+        this.x - this.radius / 3,
+        this.y - this.radius / 3,
+        this.radius / 4,
+        0,
+        Math.PI * 2
+      );
+      this.ctx.fillStyle = `rgba(${this.r + 40}, ${this.g + 40}, ${
+        this.b + 40
+      }, ${this.opacity + 0.2})`;
+      this.ctx.fill();
+
+      // Draw text with lighter version of bubble color
+      this.ctx.fillStyle = `rgba(${Math.min(255, this.r + 100)},
+                              ${Math.min(255, this.g + 100)},
+                              ${Math.min(255, this.b + 100)},
+                              ${Math.min(1, this.opacity + 0.4)})`;
+      this.ctx.font = `${this.radius / 3}px Arial`;
+      this.ctx.textAlign = "center";
+      this.ctx.textBaseline = "middle";
+      this.ctx.fillText(this.text, this.x, this.y);
+    }
+  }
+
+  update(bubbles) {
+    if (this.isPopping) {
+      this.popProgress += this.popSpeed;
+      if (this.popProgress >= 1) {
+        // Remove this bubble from the bubbles array
+        const index = bubbles.indexOf(this);
+        if (index > -1) {
+          bubbles.splice(index, 1);
+          Bubble.adjustBubbleSizes(bubbles, this.canvas, true);
+        }
+      }
+      return;
+    }
+
+    // Only animate towards target size if it changed due to word frequency
+    if (Math.abs(this.radius - this.targetRadius) > 0.1) {
+      const diff = this.targetRadius - this.radius;
+      this.radius += diff * this.growthSpeed;
+      this.baseRadius = this.radius;
+    }
+
+    // Move bubble
+    this.x += this.speedX;
+    this.y += this.speedY;
+
+    // Limit velocity after any changes (like collisions)
+    if (this.speedLimitEnabled) {
+      const currentSpeed = Math.sqrt(
+        this.speedX * this.speedX + this.speedY * this.speedY
+      );
+      if (currentSpeed > this.maxSpeed) {
+        const scale = this.maxSpeed / currentSpeed;
+        this.speedX *= scale;
+        this.speedY *= scale;
+      }
+    }
+
+    // Bounce off walls - ensure bubble stays completely within canvas
+    if (this.x + this.radius > this.canvas.width) {
+      this.x = this.canvas.width - this.radius;
+      this.speedX = -this.speedX;
+    } else if (this.x - this.radius < 0) {
+      this.x = this.radius;
+      this.speedX = -this.speedX;
+    }
+
+    if (this.y + this.radius > this.canvas.height) {
+      this.y = this.canvas.height - this.radius;
+      this.speedY = -this.speedY;
+    } else if (this.y - this.radius < 0) {
+      this.y = this.radius;
+      this.speedY = -this.speedY;
+    }
+
+    // Check collision with other bubbles
+    bubbles.forEach((otherBubble) => {
+      if (otherBubble === this) return;
+
+      const dx = otherBubble.x - this.x;
+      const dy = otherBubble.y - this.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      if (distance < this.radius + otherBubble.radius) {
+        // Collision detected - calculate new velocities
+        const angle = Math.atan2(dy, dx);
+        const sin = Math.sin(angle);
+        const cos = Math.cos(angle);
+
+        // Rotate velocities
+        const vx1 = this.speedX * cos + this.speedY * sin;
+        const vy1 = this.speedY * cos - this.speedX * sin;
+        const vx2 = otherBubble.speedX * cos + otherBubble.speedY * sin;
+        const vy2 = otherBubble.speedY * cos - otherBubble.speedX * sin;
+
+        // Calculate mass based on radius (area of the bubble)
+        const m1 = this.radius * this.radius;
+        const m2 = otherBubble.radius * otherBubble.radius;
+        const totalMass = m1 + m2;
+
+        // Calculate new velocities using conservation of momentum
+        const newVx1 = (vx1 * (m1 - m2) + 2 * m2 * vx2) / totalMass;
+        const newVx2 = (vx2 * (m2 - m1) + 2 * m1 * vx1) / totalMass;
+
+        // Update velocities
+        this.speedX = newVx1 * cos - vy1 * sin;
+        this.speedY = vy1 * cos + newVx1 * sin;
+        otherBubble.speedX = newVx2 * cos - vy2 * sin;
+        otherBubble.speedY = vy2 * cos + newVx2 * sin;
+
+        // Move bubbles apart to prevent sticking
+        const overlap = (this.radius + otherBubble.radius - distance) / 2;
+        this.x -= overlap * cos;
+        this.y -= overlap * sin;
+        otherBubble.x += overlap * cos;
+        otherBubble.y += overlap * sin;
+      }
+    });
+  }
+
+  static adjustBubbleSizes(bubbles, canvas, animate = false) {
+    // Calculate total area of all bubbles
+    const totalBubbleArea = bubbles.reduce((sum, bubble) => {
+      return sum + Math.PI * bubble.targetRadius * bubble.targetRadius;
+    }, 0);
+
+    // Calculate canvas area (we'll use 60% as maximum coverage)
+    const maxAllowedArea = canvas.width * canvas.height * 0.6;
+
+    // If total bubble area exceeds allowed area, scale all bubbles down
+    if (totalBubbleArea > maxAllowedArea) {
+      const scaleFactor = Math.sqrt(maxAllowedArea / totalBubbleArea);
+      bubbles.forEach((bubble) => {
+        bubble.targetRadius *= scaleFactor;
+        if (!animate) {
+          bubble.radius = bubble.targetRadius;
+        }
+
+        bubble.baseRadius = bubble.targetRadius;
+      });
+    }
+  }
+}
+
+      // XXX: ---------------- Constants.js
+
+      const SCALING_FACTOR = 100;
+const commonWords = [
+  // Articles
+  "a",
+  "an",
+  "the",
+
+  // Pronouns
+  "i",
+  "me",
+  "my",
+  "mine",
+  "myself",
+  "you",
+  "your",
+  "yours",
+  "yourself",
+  "he",
+  "him",
+  "his",
+  "himself",
+  "she",
+  "her",
+  "hers",
+  "herself",
+  "it",
+  "its",
+  "itself",
+  "we",
+  "us",
+  "our",
+  "ours",
+  "ourselves",
+  "they",
+  "them",
+  "their",
+  "theirs",
+  "themselves",
+  "this",
+  "that",
+  "these",
+  "those",
+  "who",
+  "whom",
+  "whose",
+  "which",
+  "what",
+
+  // Prepositions
+  "about",
+  "above",
+  "across",
+  "after",
+  "against",
+  "along",
+  "amid",
+  "among",
+  "around",
+  "at",
+  "before",
+  "behind",
+  "below",
+  "beneath",
+  "beside",
+  "between",
+  "beyond",
+  "by",
+  "down",
+  "during",
+  "except",
+  "for",
+  "from",
+  "in",
+  "inside",
+  "into",
+  "like",
+  "near",
+  "of",
+  "off",
+  "on",
+  "onto",
+  "out",
+  "outside",
+  "over",
+  "past",
+  "through",
+  "throughout",
+  "to",
+  "toward",
+  "under",
+  "up",
+  "upon",
+  "with",
+  "within",
+  "without",
+
+  // Contextual Connectors
+  "therefore",
+  "however",
+  "indeed",
+  "thus",
+  "hence",
+  "whereby",
+  "wherein",
+  "whereas",
+  "nevertheless",
+  "moreover",
+  "furthermore",
+  "finally",
+  "namely",
+  "according",
+  "accordingly",
+
+  // Auxiliary Verbs & Common Verb Forms
+  "am",
+  "is",
+  "are",
+  "was",
+  "were",
+  "be",
+  "been",
+  "being",
+  "have",
+  "has",
+  "had",
+  "having",
+  "do",
+  "does",
+  "did",
+  "doing",
+  "would",
+  "should",
+  "could",
+  "might",
+  "must",
+  "shall",
+  "will",
+  "can",
+  "may",
+
+  // Conjunctions
+  "and",
+  "but",
+  "or",
+  "nor",
+  "for",
+  "yet",
+  "so",
+  "because",
+  "although",
+  "unless",
+  "since",
+  "while",
+
+  // Common Adverbs
+  "very",
+  "really",
+  "quite",
+  "rather",
+  "somewhat",
+  "too",
+  "enough",
+  "just",
+  "even",
+  "still",
+  "again",
+  "already",
+  "always",
+  "never",
+  "now",
+  "then",
+  "usually",
+  "sometimes",
+  "often",
+
+  // Numbers as Words
+  "one",
+  "two",
+  "three",
+  "four",
+  "five",
+  "six",
+  "seven",
+  "eight",
+  "nine",
+  "ten",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
+
+  // Other Common Non-semantic Words
+  "ought",
+  "as",
+  "with",
+  "also",
+  "whatever",
+  "there",
+  "here",
+  "where",
+  "when",
+  "why",
+  "how",
+  "all",
+  "any",
+  "both",
+  "each",
+  "few",
+  "many",
+  "more",
+  "most",
+  "other",
+  "some",
+  "such",
+  "no",
+  "nor",
+  "not",
+  "only",
+  "own",
+  "same",
+  "than",
+  "well",
+  "yes",
+  "yet",
+  "thing",
+  "things",
+  "way",
+  "ways",
+  "time",
+  "times",
+  "day",
+  "days",
+  "make",
+  "made",
+  "making",
+  "take",
+  "taking",
+  "taken",
+  "come",
+  "comes",
+  "coming",
+  "came",
+  "know",
+  "knows",
+  "known",
+  "knew",
+  "see",
+  "sees",
+  "seeing",
+  "seen",
+  "saw",
+  "every",
+  "if",
+];
     </script>
   </body>
 </html>

@@ -1,3 +1,5 @@
+export const SCALING_FACTOR = 100;
+
 export const commonWords = [
   // Articles
   "a",
@@ -183,8 +185,18 @@ export const commonWords = [
   "eight",
   "nine",
   "ten",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+  "7",
+  "8",
+  "9",
 
   // Other Common Non-semantic Words
+  "ought",
   "as",
   "with",
   "also",
