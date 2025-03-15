@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Floating Bubbles</title>
+    <style>
+      canvas {
+        background: #1a1a1a;
+        display: block;
+        margin: 0 auto;
+      }
+      body {
+        margin: 0;
+        overflow: hidden;
+      }
+      #textInput {
+        position: fixed;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 80%;
+        max-width: 600px;
+        padding: 15px;
+        border-radius: 10px;
+        border: 2px solid #444;
+        background: rgba(26, 26, 26, 0.8);
+        color: white;
+        font-size: 16px;
+        resize: none;
+        box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+      }
+
+      #textInput::placeholder {
+        color: #888;
+      }
+
+      #textInput:focus {
+        outline: none;
+        border-color: #666;
+      }
+
+      #showCommonWordsToggle {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #888;
+      }
+
+      .toggle-switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+      }
+
+      .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #444;
+        transition: 0.4s;
+        border-radius: 20px;
+      }
+
+      .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 16px;
+        width: 16px;
+        left: 2px;
+        bottom: 2px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+
+      input:checked + .toggle-slider {
+        background-color: #666;
+      }
+
+      input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="bubbleCanvas"></canvas>
+    <textarea
+      id="textInput"
+      placeholder="Type or paste text here to update the bubbles..."
+      rows="3"
+    >
+    </textarea>
+    <div id="showCommonWordsToggle">
+      <label class="toggle-switch">
+        <input type="checkbox" id="showCommonWords" />
+        <span class="toggle-slider"></span>
+      </label>
+      <span>Show Common Words</span>
+    </div>
+    <div
+      id="speedLimitToggle"
+      style="
+        position: absolute;
+        top: 40px;
+        right: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        color: #888;
+      "
+    >
+      <label class="toggle-switch">
+        <input type="checkbox" id="limitSpeed" checked />
+        <span class="toggle-slider"></span>
+      </label>
+      <span>Limit Bubble Speed</span>
+    </div>
+    <script type="module">
+      import { Bubble } from "./Bubble.js";
+      import { commonWords } from "./CommonWords.js";
+
+      let wordCounts = new Map();
+      const bubbles = [];
+      const canvas = document.getElementById("bubbleCanvas");
+      const ctx = canvas.getContext("2d");
+
+      window.onload = function () {
+        // Add event listener for the text input
+        document
+          .getElementById("textInput")
+          .addEventListener("keydown", function (e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault(); // Prevent default newline
+              updateWordMap(this.value); // Update bubbles with current text
+              this.value = ""; // Clear the input
+            }
+          });
+
+        // Add checkbox event listener
+        document
+          .getElementById("showCommonWords")
+          .addEventListener("change", () => forceReRender());
+
+        // Add speed limit toggle event listener
+        document
+          .getElementById("limitSpeed")
+          .addEventListener("change", function () {
+            bubbles.forEach((bubble) => {
+              bubble.speedLimitEnabled = this.checked;
+            });
+          });
+
+        // Initialize canvas only
+        initCanvas();
+      };
+
+      // Move canvas initialization to a separate function
+      function initCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // Start animation loop immediately
+        animate();
+      }
+
+      // Animation loop
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        bubbles.forEach((bubble) => {
+          bubble.update(bubbles);
+          bubble.draw();
+        });
+
+        requestAnimationFrame(animate);
+      }
+
+      // Handle window resize
+      window.addEventListener("resize", () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        Bubble.adjustBubbleSizes(bubbles, canvas);
+      });
+
+      // Add this new function to handle text updates
+      function updateWordMap(newText) {
+        const words = newText
+          .split(/\s+/)
+          .map((word) => word.replace(/[^\w\s]|_/g, "").trim())
+          .filter((line) => line !== "");
+
+        const wc = getWordFrequencyMap(words);
+        const showCommonWords =
+          document.getElementById("showCommonWords").checked;
+
+        wc.forEach((count, word) => {
+          if (!showCommonWords || !commonWords.includes(word)) {
+            const existingCount = wordCounts.get(word) || 0;
+            wordCounts.set(word, existingCount + count);
+          }
+        });
+
+        // Update existing bubbles
+        bubbles.forEach((bubble) => {
+          const newCount = wordCounts.get(bubble.text.toLowerCase()) || 0;
+          if (
+            // Hide common words
+            !showCommonWords &&
+            commonWords.includes(bubble.text.toLowerCase())
+          ) {
+            bubble.targetRadius = 0;
+          } else if (
+            // Show common words
+            showCommonWords &&
+            commonWords.includes(bubble.text.toLowerCase()) &&
+            bubble.targetRadius === 0
+          ) {
+            bubble.targetRadius = newCount * 17;
+          } else if (
+            newCount > 1 &&
+            (!showCommonWords ||
+              !commonWords.includes(bubble.text.toLowerCase()))
+          ) {
+            bubble.targetRadius = newCount * 17;
+          }
+        });
+
+        // Add new bubbles for new words
+        wordCounts.forEach((count, word) => {
+          if (count > 1 && (!showCommonWords || !commonWords.includes(word))) {
+            const existingBubble = bubbles.find(
+              (b) => b.text.toLowerCase() === word.toLowerCase()
+            );
+            if (!existingBubble) {
+              bubbles.push(
+                new Bubble(
+                  word,
+                  count,
+                  canvas,
+                  ctx,
+                  (b) => {
+                    wordCounts.delete(b.text.toLowerCase());
+                    forceReRender();
+                  },
+                  document.getElementById("limitSpeed").checked
+                )
+              );
+            }
+          }
+        });
+
+        Bubble.adjustBubbleSizes(bubbles, canvas);
+      }
+
+      function forceReRender() {
+        updateWordMap("");
+        bubbles.forEach((bubble) => bubble.draw());
+      }
+
+      function getWordFrequencyMap(words) {
+        // Create a Map to store word counts
+        const wordCounts = new Map();
+
+        // Count occurrences of each word
+        words.forEach((word) => {
+          const lowercaseWord = word.toLowerCase(); // normalize words to lowercase
+          wordCounts.set(
+            lowercaseWord,
+            (wordCounts.get(lowercaseWord) || 0) + 1
+          );
+        });
+
+        // Convert to array and sort by count (descending)
+        const sortedWords = Array.from(wordCounts.entries()).sort(
+          (a, b) => b[1] - a[1]
+        );
+
+        // Convert back to Map to maintain order
+        return new Map(sortedWords);
+      }
+    </script>
+  </body>
+</html>
